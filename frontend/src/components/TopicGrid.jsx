@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/Card';
 import { Button } from './ui/Button';
 import { apiService } from '../services/api';
@@ -10,31 +10,33 @@ export default function TopicGrid({ channelId }) {
   const [selectedTopic, setSelectedTopic] = useState(null);
   const [error, setError] = useState('');
 
-  const fetchTopics = async () => {
+  const fetchTopics = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       const data = await apiService.getTopics(channelId);
       setTopics(data);
       // Auto-select first topic if nothing is selected
-      if (data.length > 0 && !selectedTopic) {
-        setSelectedTopic(data[0]);
-      } else if (data.length > 0 && selectedTopic) {
-        // Refresh selected topic data
-        const updated = data.find(t => t.topic === selectedTopic.topic);
-        if (updated) setSelectedTopic(updated);
-      }
+      setSelectedTopic(prev => {
+        if (data.length > 0 && !prev) {
+          return data[0];
+        } else if (data.length > 0 && prev) {
+          const updated = data.find(t => t.topic === prev.topic);
+          return updated || prev;
+        }
+        return null;
+      });
     } catch (err) {
       console.error(err);
       setError('Failed to fetch topics. Make sure the backend is running.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [channelId]);
 
   useEffect(() => {
     fetchTopics();
-  }, [channelId]);
+  }, [fetchTopics]);
 
   // Helper to convert seconds to MM:SS format
   const formatTime = (secs) => {

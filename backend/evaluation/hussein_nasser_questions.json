@@ -1,0 +1,162 @@
+[
+  {
+    "id": "http2-connections-01",
+    "question": "How does HTTP/2 reduce connection pressure in backend systems?",
+    "expected_video_ids": [
+      "ImaSgNgxu00"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "tls-performance-02",
+    "question": "Why can TLS add latency to backend communication, and how can that be reduced?",
+    "expected_video_ids": [
+      "-A7b_BXvRLg"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "socket-management-03",
+    "question": "What are the key challenges of socket management in backend system design?",
+    "expected_video_ids": [
+      "x9iHwoAbwiA"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "socket-close-04",
+    "question": "Why must backend services close sockets correctly?",
+    "expected_video_ids": [
+      "DZTq_ADss7U"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "sync-async-io-05",
+    "question": "What is the difference between synchronous and asynchronous database I/O?",
+    "expected_video_ids": [
+      "vKiGo8aShyo"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "http-graceful-shutdown-06",
+    "question": "How should an HTTP server perform graceful shutdown?",
+    "expected_video_ids": [
+      "abUaM6iuElU"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "postgres-internals-07",
+    "question": "What are the important internal concepts for understanding how PostgreSQL works?",
+    "expected_video_ids": [
+      "q9jixKv4h2I"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "query-optimization-scroll-08",
+    "question": "How can query optimization enable efficient infinite scrolling?",
+    "expected_video_ids": [
+      "Tzt89dHF79Y"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "postgres-linux-performance-09",
+    "question": "Why did PostgreSQL performance change in Linux 7.0?",
+    "expected_video_ids": [
+      "gO4J5Bkd1Oc"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "http11-connections-10",
+    "question": "Why is releasing HTTP/1.1 connections important for backend performance?",
+    "expected_video_ids": [
+      "rjx4XRvw9PY"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "postgres-direct-io-11",
+    "question": "What is the current state of Direct I/O in PostgreSQL?",
+    "expected_video_ids": [
+      "tO5kZv5bQ7I"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "postgres18-async-io-12",
+    "question": "Which asynchronous I/O methods does PostgreSQL 18 support?",
+    "expected_video_ids": [
+      "1IYOmUzKg2s"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "virtual-memory-13",
+    "question": "What is virtual memory and why does an operating system need it?",
+    "expected_video_ids": [
+      "q1kBGyEsxdQ"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "webtransport-14",
+    "question": "What makes WebTransport useful for real-time backend communication?",
+    "expected_video_ids": [
+      "h9LYokF5K0k"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "postgres18-async-io-deep-dive-15",
+    "question": "How does asynchronous I/O work in PostgreSQL 18?",
+    "expected_video_ids": [
+      "yGjGc21mmoU"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  },
+  {
+    "id": "websocket-load-balancing-16",
+    "question": "How can WebSocket streams be load balanced efficiently?",
+    "expected_video_ids": [
+      "ugAZsDdmwJQ"
+    ],
+    "expected_start_times": [],
+    "expected_facts": [],
+    "verification_status": "video_and_transcript_verified_timestamp_review_pending"
+  }
+]

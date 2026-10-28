@@ -12,9 +12,9 @@ const client = axios.create({
 });
 
 export const apiService = {
-  // Index a channel (supports optional custom_topics)
-  indexChannel: async (url, customTopics = null) => {
-    const payload = { url };
+  // Index a channel (supports optional custom_topics and bounded scope)
+  indexChannel: async (url, customTopics = null, scope = 'latest_20') => {
+    const payload = { url, scope };
     if (customTopics && customTopics.length > 0) {
       payload.custom_topics = customTopics;
     }

@@ -1,7 +1,7 @@
 import logging
 import json
 import re
-from typing import List, Tuple, Optional, Callable
+from typing import List, Tuple, Optional, Callable, Dict, Any
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.documents import Document
@@ -54,6 +54,57 @@ def is_timeline_question(query: str) -> bool:
     return any(re.search(pattern, q) for pattern in TIMELINE_PATTERNS)
 
 
+# ─── Pure RRF Helper Functions ───────────────────────────────────────────────
+
+def document_key(document: Document) -> tuple:
+    """
+    Returns unique tuple key for a document based on video_id and start_time.
+    """
+    return (
+        document.metadata.get("video_id"),
+        document.metadata.get("start_time"),
+    )
+
+def reciprocal_rank_fusion(
+    ranked_lists: List[List[Document]],
+    k: int = 60,
+) -> List[Document]:
+    """
+    Combines multiple ranked lists using Reciprocal Rank Fusion:
+    RRF(document) = sum(1 / (k + rank))
+    using 1-based ranks. Returns deduplicated documents ordered by descending score.
+    """
+    scores: Dict[tuple, float] = {}
+    doc_map: Dict[tuple, Document] = {}
+
+    for doc_list in ranked_lists:
+        for rank_0, doc in enumerate(doc_list):
+            rank = rank_0 + 1
+            key = document_key(doc)
+            if key not in doc_map:
+                doc_map[key] = doc
+                scores[key] = 0.0
+            scores[key] += 1.0 / (k + rank)
+
+    sorted_keys = sorted(scores.keys(), key=lambda key: scores[key], reverse=True)
+    return [doc_map[key] for key in sorted_keys]
+
+
+def validate_citations(response_text: str, retrieved_sources: List[dict]) -> List[dict]:
+    """
+    Checks whether cited video IDs in the generated response exist in the retrieved sources.
+    Logs invalid citations without claiming factual validation.
+    """
+    valid_video_ids = {s.get("video_id") for s in retrieved_sources if s.get("video_id")}
+    matches = re.findall(r"watch\?v=([a-zA-Z0-9_-]+)", response_text)
+    invalid = []
+    for vid in matches:
+        if vid not in valid_video_ids:
+            logger.warning(f"Citation validation: cited video_id '{vid}' was not in retrieved source list.")
+            invalid.append({"video_id": vid, "reason": "not_in_retrieved_sources"})
+    return invalid
+
+
 def get_channel_overview_context(channel_id: str) -> Tuple[str, List[dict]]:
     """
     Builds a channel-level overview context by pulling:
@@ -102,7 +153,7 @@ def get_channel_overview_context(channel_id: str) -> Tuple[str, List[dict]]:
             citations.append({
                 "video_id": video.video_id,
                 "title": video.title,
-                "start_time": 0,
+                "start_time": 0.0,
                 "upload_date": upload_str
             })
 
@@ -114,8 +165,8 @@ def get_channel_overview_context(channel_id: str) -> Tuple[str, List[dict]]:
 
 def get_hybrid_context(query_text: str, channel_id: Optional[str] = None, k: int = 8) -> List[Document]:
     """
-    Retrieves transcript chunks by interleaving ChromaDB semantic vector search
-    with BM25 keyword matching from SQLite for reciprocal rank fusion.
+    Retrieves transcript chunks by combining ChromaDB semantic vector search
+    with BM25 keyword matching from SQLite using True Reciprocal Rank Fusion (RRF).
     """
     # 1. Semantic Vector Search (ChromaDB)
     vector_store = get_vector_store()
@@ -124,7 +175,7 @@ def get_hybrid_context(query_text: str, channel_id: Optional[str] = None, k: int
         search_kwargs["filter"] = {"channel_id": channel_id}
         
     try:
-        vector_docs = vector_store.similarity_search(query_text, k=k, **search_kwargs)
+        vector_docs = vector_store.similarity_search(query_text, k=k * 2, **search_kwargs)
     except Exception as e:
         logger.error(f"Vector similarity search failed: {e}")
         vector_docs = []
@@ -153,14 +204,14 @@ def get_hybrid_context(query_text: str, channel_id: Optional[str] = None, k: int
                     reverse=True
                 )
                 
-                for (chunk, title, upload_date), score in ranked_chunks[:k]:
+                for (chunk, title, upload_date), score in ranked_chunks[:k * 2]:
                     if score > 0.0:
                         doc = Document(
                             page_content=chunk.text,
                             metadata={
                                 "video_id": chunk.video_id,
                                 "title": title,
-                                "start_time": chunk.start_time,
+                                "start_time": float(chunk.start_time),
                                 "upload_date": upload_date.isoformat() if upload_date else ""
                             }
                         )
@@ -170,27 +221,15 @@ def get_hybrid_context(query_text: str, channel_id: Optional[str] = None, k: int
     finally:
         session.close()
         
-    # 3. Reciprocal Interleaving & Deduplication
-    combined_docs = []
-    seen = set()
-    
-    max_len = max(len(vector_docs), len(bm25_docs))
-    for i in range(max_len):
-        if i < len(vector_docs):
-            v_doc = vector_docs[i]
-            v_key = (v_doc.metadata.get("video_id"), v_doc.metadata.get("start_time"))
-            if v_key not in seen:
-                seen.add(v_key)
-                combined_docs.append(v_doc)
-                
-        if i < len(bm25_docs):
-            b_doc = bm25_docs[i]
-            b_key = (b_doc.metadata.get("video_id"), b_doc.metadata.get("start_time"))
-            if b_key not in seen:
-                seen.add(b_key)
-                combined_docs.append(b_doc)
-                
-    return combined_docs[:k]
+    # 3. True Reciprocal Rank Fusion
+    ranked_lists = []
+    if vector_docs:
+        ranked_lists.append(vector_docs)
+    if bm25_docs:
+        ranked_lists.append(bm25_docs)
+
+    fused_docs = reciprocal_rank_fusion(ranked_lists, k=60)
+    return fused_docs[:k]
 
 
 def query_rag(query_text: str, channel_id: Optional[str] = None, sort_by_date: bool = False) -> Callable:
@@ -203,8 +242,14 @@ def query_rag(query_text: str, channel_id: Optional[str] = None, sort_by_date: b
         logger.info(f"Intent classified: CHANNEL_OVERVIEW for channel {channel_id}")
         context_str, citations = get_channel_overview_context(channel_id)
 
+        if not citations:
+            def generate_empty():
+                yield f"METADATA:[]\n"
+                yield "I do not have enough information because no indexed videos were found for this channel."
+            return generate_empty
+
         system_prompt = (
-            "You are an AI assistant with access to the full video library of a YouTube channel.\n"
+            "You are an AI assistant with access to the video library of a YouTube channel.\n"
             "Below you are given the title, description, upload date, and opening transcript excerpt for videos in this channel.\n\n"
             "Your task:\n"
             "- Provide a comprehensive, structured overview of what this channel covers.\n"
@@ -212,7 +257,8 @@ def query_rag(query_text: str, channel_id: Optional[str] = None, sort_by_date: b
             "- Synthesize across the entire library with specific video titles as evidence.\n\n"
             "STRICT RULES:\n"
             "- Base your answer ONLY on the provided video metadata.\n"
-            "- Cite videos using this markdown link format: [Video Title](https://youtube.com/watch?v={video_id})\n\n"
+            "- Cite videos using this markdown link format: [Video Title](https://youtube.com/watch?v={video_id})\n"
+            "- Generated answers should be verified through the linked video timestamp citations.\n\n"
             f"Channel Video Library:\n{context_str}"
         )
 
@@ -224,8 +270,12 @@ def query_rag(query_text: str, channel_id: Optional[str] = None, sort_by_date: b
 
         def generate_stream():
             yield f"METADATA:{json.dumps(citations)}\n"
+            full_response = []
             for chunk in llm.stream(messages):
-                yield chunk.content
+                text_chunk = chunk.content if hasattr(chunk, "content") else str(chunk)
+                full_response.append(text_chunk)
+                yield text_chunk
+            validate_citations("".join(full_response), citations)
 
         return generate_stream
 
@@ -238,6 +288,12 @@ def query_rag(query_text: str, channel_id: Optional[str] = None, sort_by_date: b
 
     docs = get_hybrid_context(query_text, channel_id=channel_id, k=k_limit)
 
+    if not docs:
+        def generate_insufficient():
+            yield f"METADATA:[]\n"
+            yield "I do not have enough information from the indexed transcripts of this channel to answer this question."
+        return generate_insufficient
+
     if is_timeline:
         docs = sorted(docs, key=lambda x: x.metadata.get("upload_date", ""))
 
@@ -247,8 +303,8 @@ def query_rag(query_text: str, channel_id: Optional[str] = None, sort_by_date: b
     for doc in docs:
         meta = doc.metadata
         video_id = meta.get("video_id")
-        title = meta.get("title")
-        start_time = meta.get("start_time", 0.0)
+        title = meta.get("title", "YouTube Video")
+        start_time = float(meta.get("start_time", 0.0))
         upload_date = meta.get("upload_date", "")
 
         citation = {
@@ -286,7 +342,8 @@ def query_rag(query_text: str, channel_id: Optional[str] = None, sort_by_date: b
         "Citations Policy:\n"
         "1. For every fact, assertion, or summary, cite the source video inline.\n"
         "2. Format each link as: [Video Title](https://youtube.com/watch?v={video_id}&t={seconds}) where {seconds} is the start time in seconds.\n"
-        "3. Only use the video_id and start_time provided in the Context.\n\n"
+        "3. Only use the video_id and start_time provided in the Context.\n"
+        "4. Note: Generated answers should be verified through the linked video timestamp citations.\n\n"
         f"Context:\n{context_str}"
     )
 
@@ -298,7 +355,11 @@ def query_rag(query_text: str, channel_id: Optional[str] = None, sort_by_date: b
 
     def generate_stream():
         yield f"METADATA:{json.dumps(citations)}\n"
+        full_response = []
         for chunk in llm.stream(messages):
-            yield chunk.content
+            text_chunk = chunk.content if hasattr(chunk, "content") else str(chunk)
+            full_response.append(text_chunk)
+            yield text_chunk
+        validate_citations("".join(full_response), citations)
 
     return generate_stream

@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './ui/Card';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
 import { apiService } from '../services/api';
-import { Plus, Youtube, RefreshCw, Layers } from 'lucide-react';
+import { Plus, Youtube, RefreshCw, Layers, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function ChannelIndexer({ onSelectChannel, selectedChannelId, channels = [], fetchChannels }) {
   const [url, setUrl] = useState('');
+  const [scope, setScope] = useState('latest_20');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -20,15 +21,16 @@ export default function ChannelIndexer({ onSelectChannel, selectedChannelId, cha
     setSuccess('');
 
     try {
-      const response = await apiService.indexChannel(url);
-      setSuccess(`Successfully resolved! ${response.message}`);
+      const response = await apiService.indexChannel(url, null, scope);
+      setSuccess(`Success: ${response.message}`);
       setUrl('');
       if (fetchChannels) fetchChannels();
       if (onSelectChannel && response.channel) {
         onSelectChannel(response.channel.channel_id);
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to trigger indexing. Please check the URL.');
+      const errorMsg = err.response?.data?.detail || 'Failed to start indexing. Please check the URL or channel handle.';
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -49,6 +51,14 @@ export default function ChannelIndexer({ onSelectChannel, selectedChannelId, cha
     }
   };
 
+  const formatScopeLabel = (scopeVal) => {
+    switch (scopeVal) {
+      case 'latest_20': return 'Latest 20 videos';
+      case 'latest_50': return 'Latest 50 videos';
+      case 'entire_channel': return 'Entire channel';
+      default: return 'Latest 20 videos';
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -59,33 +69,47 @@ export default function ChannelIndexer({ onSelectChannel, selectedChannelId, cha
             <span>Index YouTube Channel</span>
           </CardTitle>
           <CardDescription>
-            Enter any YouTube Channel URL (e.g., handles like <code className="text-primary font-mono bg-white/5 px-1.5 py-0.5 rounded">https://youtube.com/@LangChain</code> or IDs) to resolve, download transcripts, and build a vector database.
+            Enter a YouTube Channel URL or handle (e.g., <code className="text-primary font-mono bg-white/5 px-1.5 py-0.5 rounded">https://youtube.com/@hnasr</code> or <code className="text-primary font-mono bg-white/5 px-1.5 py-0.5 rounded">@LangChain</code>) and select a bounded indexing scope.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleIndex} className="space-y-4">
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Input
                 type="text"
                 placeholder="https://youtube.com/@creator"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={loading}
+                className="flex-grow"
               />
+              <select
+                value={scope}
+                onChange={(e) => setScope(e.target.value)}
+                disabled={loading}
+                className="bg-[#0f172a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-primary shrink-0"
+                aria-label="Indexing Scope"
+              >
+                <option value="latest_20">Latest 20 videos</option>
+                <option value="latest_50">Latest 50 videos</option>
+                <option value="entire_channel">Entire channel</option>
+              </select>
               <Button type="submit" loading={loading} className="shrink-0 gap-1.5">
                 <Plus className="w-4 h-4" />
-                <span>Index</span>
+                <span>Index ({formatScopeLabel(scope)})</span>
               </Button>
             </div>
             {error && (
-              <p className="text-xs text-red-400 bg-red-950/20 border border-red-500/20 p-2.5 rounded-lg">
-                {error}
-              </p>
+              <div className="flex items-center gap-2 text-xs text-red-400 bg-red-950/20 border border-red-500/20 p-2.5 rounded-lg">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{error}</span>
+              </div>
             )}
             {success && (
-              <p className="text-xs text-green-400 bg-green-950/20 border border-green-500/20 p-2.5 rounded-lg">
-                {success}
-              </p>
+              <div className="flex items-center gap-2 text-xs text-green-400 bg-green-950/20 border border-green-500/20 p-2.5 rounded-lg">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-green-400" />
+                <span>{success}</span>
+              </div>
             )}
           </form>
         </CardContent>
@@ -113,7 +137,9 @@ export default function ChannelIndexer({ onSelectChannel, selectedChannelId, cha
             <div className="divide-y divide-white/5">
               {channels.map((channel) => {
                 const isSelected = selectedChannelId === channel.channel_id;
-                const isIndexing = channel.is_indexing;
+                const status = channel.indexing_status || (channel.is_indexing ? 'indexing' : 'idle');
+                const isIndexing = status === 'indexing';
+                const isCancelling = status === 'cancel_requested';
                 
                 return (
                   <div
@@ -132,14 +158,17 @@ export default function ChannelIndexer({ onSelectChannel, selectedChannelId, cha
                         />
                       ) : (
                         <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center text-white font-bold">
-                          {channel.channel_name[0]}
+                          {channel.channel_name ? channel.channel_name[0] : 'C'}
                         </div>
                       )}
                       <div>
                         <h4 className="text-sm font-medium text-white flex items-center gap-1.5">
                           {channel.channel_name}
                           {isIndexing && (
-                            <span className="inline-flex h-2 w-2 rounded-full bg-yellow-400 animate-ping" />
+                            <span className="inline-flex h-2 w-2 rounded-full bg-yellow-400 animate-ping" title="Indexing in progress" />
+                          )}
+                          {isCancelling && (
+                            <span className="inline-flex h-2 w-2 rounded-full bg-orange-400 animate-pulse" title="Cancellation requested" />
                           )}
                         </h4>
                         <p className="text-xs text-muted-foreground">
@@ -152,13 +181,14 @@ export default function ChannelIndexer({ onSelectChannel, selectedChannelId, cha
                       <div className="text-xs font-mono font-medium text-white">
                         {channel.indexed_videos} / {channel.total_videos} videos
                       </div>
+                      {channel.failed_videos > 0 && (
+                        <div className="text-[10px] text-red-400 font-mono">
+                          {channel.failed_videos} failed / no transcript
+                        </div>
+                      )}
                       <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center justify-end gap-1.5">
-                        <span>
-                          {channel.is_indexing 
-                            ? 'Indexing...' 
-                            : channel.indexed_videos < channel.total_videos 
-                              ? 'Stopped' 
-                              : 'Ready'}
+                        <span className="capitalize font-mono">
+                          Status: {status === 'cancel_requested' ? 'Cancelling...' : status === 'indexing' ? 'Indexing...' : channel.indexed_videos < channel.total_videos && channel.total_videos > 0 ? 'Partial' : 'Ready'}
                         </span>
                         {isIndexing && (
                           <button

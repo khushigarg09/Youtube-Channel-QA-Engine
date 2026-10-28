@@ -92,18 +92,26 @@ class YouTubeClient:
         channel_id = items[0].get("id", {}).get("channelId")
         return self.get_channel_details(channel_id=channel_id)
 
-    def get_all_videos_in_playlist(self, playlist_id: str) -> list:
+    def get_all_videos_in_playlist(self, playlist_id: str, limit: int = None) -> list:
         """
-        Fetches all video metadata from the channel's uploads playlist.
+        Fetches video metadata from the channel's uploads playlist in newest-first order.
+        If limit is specified, stops fetching after reaching that number of videos.
         """
         videos = []
         next_page_token = None
 
         while True:
+            fetch_size = 50
+            if limit is not None:
+                remaining = limit - len(videos)
+                if remaining <= 0:
+                    break
+                fetch_size = max(1, min(50, remaining))
+
             response = self.youtube.playlistItems().list(
                 part="snippet,contentDetails",
                 playlistId=playlist_id,
-                maxResults=50,
+                maxResults=fetch_size,
                 pageToken=next_page_token
             ).execute()
 
@@ -135,6 +143,12 @@ class YouTubeClient:
                     "thumbnail_url": thumbnail_url,
                     "duration_seconds": 0  # Updated in a batch video query
                 })
+
+                if limit is not None and len(videos) >= limit:
+                    break
+
+            if limit is not None and len(videos) >= limit:
+                break
 
             next_page_token = response.get("nextPageToken")
             if not next_page_token:

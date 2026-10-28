@@ -83,7 +83,6 @@ export default function ChatWindow({ channelId }) {
     setMessages(prev => [...prev, { role: 'assistant', text: '', sources: [] }]);
 
     let accumulatedText = '';
-    let citations = [];
 
     await apiService.chatStream(
       userMessage,
@@ -91,7 +90,6 @@ export default function ChatWindow({ channelId }) {
       sortByDate,
       {
         onMetadata: (metadata) => {
-          citations = metadata;
           setCurrentSources(metadata);
           setMessages(prev => {
             const updated = [...prev];
@@ -149,7 +147,6 @@ export default function ChatWindow({ channelId }) {
 
       const title = match[1];
       const url = match[2];
-      const videoId = match[3];
       const seconds = parseInt(match[4], 10);
       
       const mm = Math.floor(seconds / 60);
@@ -281,9 +278,12 @@ export default function ChatWindow({ channelId }) {
             <ListFilter className="w-4 h-4 text-primary" />
             <span>Retrieved Sources</span>
           </CardTitle>
-          <CardDescription>Video contexts used to craft the answer.</CardDescription>
+          <CardDescription>Video contexts with timestamp citations.</CardDescription>
         </CardHeader>
         <CardContent className="overflow-y-auto flex-grow p-4 space-y-3 custom-scrollbar bg-black/5">
+          <div className="text-[10px] text-muted-foreground bg-white/5 p-2 rounded border border-white/5 leading-relaxed">
+            Note: Generated answers should be verified through the linked video timestamp citations.
+          </div>
           {currentSources.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-4">
               <MessageSquare className="w-8 h-8 text-white/10 mb-2" />
@@ -302,8 +302,8 @@ export default function ChatWindow({ channelId }) {
                   key={index}
                   className="glass-panel p-3 rounded-lg border border-white/5 hover:bg-white/5 transition-all text-xs space-y-2"
                 >
-                  <div className="font-semibold text-white line-clamp-1" title={source.title}>
-                    {source.title}
+                  <div className="font-semibold text-white line-clamp-2" title={source.title}>
+                    <span className="text-primary mr-1">Video:</span>{source.title}
                   </div>
                   
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground">
@@ -311,8 +311,8 @@ export default function ChatWindow({ channelId }) {
                       <Calendar className="w-3 h-3" />
                       {source.upload_date ? new Date(source.upload_date).toLocaleDateString() : 'N/A'}
                     </span>
-                    <span className="font-mono bg-white/5 px-1.5 py-0.5 rounded text-indigo-300 font-semibold">
-                      t={timeFormatted}
+                    <span className="font-mono bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded text-indigo-300 font-semibold" title="Timestamp">
+                      Start: {timeFormatted} ({Math.floor(source.start_time)}s)
                     </span>
                   </div>
 
@@ -322,7 +322,7 @@ export default function ChatWindow({ channelId }) {
                     rel="noopener noreferrer"
                     className="w-full inline-flex items-center justify-center gap-1 bg-white/5 hover:bg-white/10 py-1.5 rounded border border-white/10 transition-colors text-slate-300 hover:text-white font-medium"
                   >
-                    <span>Open YouTube</span>
+                    <span>Open Timestamp</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>

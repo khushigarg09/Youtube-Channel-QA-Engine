@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ChannelIndexer from './components/ChannelIndexer';
 import ChatWindow from './components/ChatWindow';
 import VideoCard from './components/VideoCard';
 import TopicGrid from './components/TopicGrid';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from './components/ui/Card';
 import { Input } from './components/ui/Input';
 import { Button } from './components/ui/Button';
 import { apiService, API_BASE_URL } from './services/api';
@@ -23,20 +22,18 @@ export default function App() {
   const [videoSearchText, setVideoSearchText] = useState('');
   const [selectedVideoDetail, setSelectedVideoDetail] = useState(null);
 
-  const fetchChannels = async () => {
+  const fetchChannels = useCallback(async () => {
     try {
       const data = await apiService.getChannels();
       setChannels(data);
       // Auto-select first channel if nothing is selected yet
-      if (data.length > 0 && !selectedChannelId) {
-        setSelectedChannelId(data[0].channel_id);
-      }
+      setSelectedChannelId(prev => (data.length > 0 && !prev ? data[0].channel_id : prev));
     } catch (err) {
       console.error(err);
     }
-  };
+  }, []);
 
-  const fetchVideos = async () => {
+  const fetchVideos = useCallback(async () => {
     if (!selectedChannelId) return;
     setVideosLoading(true);
     try {
@@ -47,11 +44,11 @@ export default function App() {
     } finally {
       setVideosLoading(false);
     }
-  };
+  }, [selectedChannelId]);
 
   useEffect(() => {
     fetchChannels();
-  }, []);
+  }, [fetchChannels]);
 
   // Listen to indexing progress via Server-Sent Events (SSE) in real-time
   useEffect(() => {
@@ -75,17 +72,20 @@ export default function App() {
 
         setChannels(prev => prev.map(c => {
           if (c.channel_id === channelId) {
+            const newStatus = data.indexing_status || (data.total_videos > 0 && data.indexed_videos === data.total_videos ? 'idle' : c.indexing_status);
             return {
               ...c,
               indexed_videos: data.indexed_videos,
-              total_videos: data.total_videos
+              total_videos: data.total_videos,
+              indexing_status: newStatus,
+              is_indexing: newStatus === 'indexing'
             };
           }
           return c;
         }));
 
-        if (data.total_videos > 0 && data.indexed_videos === data.total_videos) {
-          console.log("Indexing complete. Closing SSE stream.");
+        if ((data.total_videos > 0 && data.indexed_videos === data.total_videos) || (data.indexing_status && data.indexing_status !== 'indexing')) {
+          console.log("Indexing finished or stopped. Closing SSE stream.");
           eventSource.close();
           fetchChannels();
           if (selectedChannelId === channelId) {
@@ -105,7 +105,7 @@ export default function App() {
     return () => {
       eventSource.close();
     };
-  }, [channels, selectedChannelId]);
+  }, [channels, selectedChannelId, fetchChannels, fetchVideos]);
 
   useEffect(() => {
     if (selectedChannelId) {
@@ -113,7 +113,7 @@ export default function App() {
       setSelectedChannel(found || null);
       fetchVideos();
     }
-  }, [selectedChannelId, channels]);
+  }, [selectedChannelId, channels, fetchVideos]);
 
   const handleViewVideoDetail = async (videoId) => {
     try {

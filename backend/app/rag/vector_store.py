@@ -1,8 +1,11 @@
 import os
+import logging
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
 from app.rag.embeddings import get_embeddings
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _vector_store = None
 
@@ -26,6 +29,21 @@ def get_vector_store() -> Chroma:
     )
     
     return _vector_store
+
+def delete_video_vectors(video_id: str) -> None:
+    vector_store = get_vector_store()
+    try:
+        vector_store.delete(where={"video_id": video_id})
+        logger.info("Deleted ChromaDB vectors for video_id: %s", video_id)
+    except Exception as exc:
+        logger.error(
+            "Failed to delete ChromaDB vectors for video_id %s",
+            video_id,
+            exc_info=True,
+        )
+        raise RuntimeError(
+            f"Failed to clean existing vectors for video {video_id}"
+        ) from exc
 
 def add_transcript_chunks(video_id: str, channel_id: str, title: str, upload_date: str, chunks: list) -> list:
     """

@@ -1,108 +1,218 @@
 # 🎥 YouTube Channel QA Engine
-> **Turn any YouTube channel into an AI-powered QA knowledge base with multi-video synthesis and clickable timestamp citations.**
+
+> A local YouTube Channel QA Engine that indexes video transcripts and answers cross-video questions with timestamped citations.
 
 ## Overview
-YouTube Channel QA Engine is a full-stack Retrieval-Augmented Generation (RAG) application that ingests entire YouTube channels, processes their transcripts, and allows users to ask natural language questions across the creator's entire video catalog.
 
-## Problem Statement
-Standard YouTube search is limited to exact keyword matches against video titles and short descriptions. When researching complex topics across a creator's archive (e.g., *"How has this creator's advice on investing changed over the last 3 years?"*), users are forced to manually scrub through dozens of hours of video footage.
+YouTube Channel QA Engine is a local, single-user Retrieval-Augmented Generation (RAG) application. It ingests video transcripts from designated YouTube channels, stores metadata and transcripts in **SQLite**, indexes chunk embeddings in **ChromaDB**, and leverages **BM25 lexical search** combined with **True Reciprocal Rank Fusion (RRF)** to answer natural language questions with timestamped video citations using **Groq (Llama 3.3)**.
 
-## Solution
-This project automates the ingestion of a channel's entire transcript history, chunks the text semantically, and stores it in a hybrid vector/relational database. Users can ask complex queries and receive synthesized, streaming answers from **Llama 3.3**, complete with clickable citations that jump directly to the exact timestamp in the source video.
-
-## Key Features
-- **Cross-Video Knowledge Synthesis**: Queries span across dozens of videos simultaneously, not just single clips.
-- **Hybrid Retrieval Engine (RRF)**: Blends semantic vector embeddings with exact lexical keyword matching (BM25) via Reciprocal Rank Fusion.
-- **Clickable Timestamp Citations**: Answers include deep links (`https://youtu.be/<id>?t=<seconds>`) to verify the source instantly.
-- **Dynamic Topic Discovery**: Unsupervised extraction of key concepts (tech, finance, history) without hardcoded dictionaries.
-- **Real-Time SSE Streaming**: Live percentage progress for ingestion and token-by-token streaming for LLM answers.
-- **Data Export**: Export complete channel transcripts and metadata to JSON or CSV.
+---
 
 ## Architecture
-The system operates in three main phases: Ingestion, Storage, and RAG Synthesis.
+
+The system is designed for simple, local single-user execution without cloud database or container dependencies:
 
 ```text
-Step 1: INGESTION                   Step 2: STORAGE                  Step 3: CHAT & SEARCH
-=================                   ===============                  =====================
-
-[ YouTube Channel URL ]                                             [ User Question ]
-       │                                                                   │
-       ▼                                                                   ▼
-Fetch metadata & transcripts (YouTube API)                           Hybrid Search (RRF)
-       │                                                                   │
-       ▼                                                                   ▼
-Chunk text & overlap                ┌────────────────────────┐      Synthesize answer
-       │                            │  ChromaDB (Vectors)    │ ───► Groq (Llama 3.3)
-       ├──────────────────────────► │  SQLite/PG (Metadata)  │             │
-       │                            └────────────────────────┘             ▼
-Extract dynamic topics                                              Answer + Clickable
-                                                                    Timestamp Links
+React + Vite (Frontend)
+       │
+   FastAPI (Backend)
+  ┌────┴───────────────────────────┬───────────────────────────┐
+  │                                │                           │
+SQLite                         ChromaDB                      Groq
+- Channels                      - Chunk Embeddings            - Streaming Answer
+- Videos                        - Vector Search                 Generation
+- Transcripts                   - Local Directory Persistence - Timestamp Citations
+- Dynamic Topics
+- Indexing Status
+  │                                │
+  └────────── BM25 Okapi ──────────┘
+                   │
+         True RRF Hybrid Fusion
+                   │
+          Top Transcript Chunks
 ```
+
+### Retrieval & Ingestion Workflow
+
+1. **Ingestion & Bounded Scope**: Channel metadata and videos are fetched from the uploads playlist with selectable bounded scope (`latest_20`, `latest_50`, or `entire_channel`).
+2. **Transcript Processing & Whisper Fallback**: Video subtitles are extracted using `youtube-transcript-api`. If subtitles are unavailable, an optional Groq Whisper audio fallback is attempted with immediate cleanup of temporary `.m4a` files.
+3. **Storage & Reindexing Consistency**:
+   - Vectors are stored in local ChromaDB collections.
+   - Text chunks, channel metadata, and dynamic keyphrase topics are stored in SQLite.
+   - Re-indexing automatically deletes stale vectors and chunk records to maintain consistency.
+4. **Hybrid Retrieval with True RRF**:
+   - Semantic similarity search (ChromaDB)
+   - Exact keyword matching (BM25Okapi over SQLite chunks)
+   - Fused using Reciprocal Rank Fusion:
+     $$\text{RRF}(d) = \sum \frac{1}{k + \text{rank}}$$
+5. **Answer Synthesis & Citation Validation**: Groq streams answers citing timestamps (`https://youtube.com/watch?v={id}&t={seconds}`). Inline citations are verified against retrieved sources.
+
+---
 
 ## Tech Stack
-- **Programming Languages**: Python 3.10+, JavaScript (ES6+)
-- **Frameworks/Libraries**: FastAPI, React, Tailwind CSS, LangChain, SQLAlchemy
-- **AI/ML Models**: Llama 3.3 70B (via Groq), `BAAI/bge-small-en-v1.5` (Local Embeddings)
-- **Databases**: ChromaDB (Vector Store), PostgreSQL / SQLite (Relational Store)
-- **APIs/Services**: YouTube Data API v3, Groq API
-- **Testing/Tools**: Pytest, Vite, Axios, Uvicorn
+
+- **Backend**: Python 3.10+, FastAPI, SQLAlchemy, Uvicorn, SlowAPI
+- **Relational Storage**: SQLite (`youtube_knowledge_graph.db`)
+- **Vector Storage**: ChromaDB (`./chroma_db`)
+- **Lexical Search**: `rank-bm25` (BM25Okapi)
+- **Embeddings**: `BAAI/bge-small-en-v1.5` (via Hugging Face / Sentence-Transformers)
+- **LLM Synthesis**: Groq API (`llama-3.3-70b-versatile`)
+- **Transcript Extraction**: `youtube-transcript-api`, `yt-dlp`
+- **Frontend**: React, Vite, Tailwind CSS, Axios, Lucide Icons
+- **Testing**: Pytest, Pytest-Mock, HTTPX
+
+---
 
 ## Project Structure
+
 ```text
-YouTube-Knowledge-Graph/
+Youtube-Channel-QA-Engine/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          # FastAPI routers and Pydantic schemas
-│   │   ├── database/     # SQLAlchemy models and connection pooling
-│   │   ├── ingest/       # YouTube API integration and background workers
-│   │   ├── rag/          # Hybrid search, LangChain prompts, and LLM integration
-│   │   └── services/     # Dynamic topic extraction and business logic
-│   ├── tests/            # 18 Pytest unit and integration tests
-│   ├── requirements.txt  
-│   └── main.py           # Application entrypoint and lifespan hooks
+│   │   ├── api/          # FastAPI routers, endpoints, and Pydantic schemas
+│   │   ├── database/     # SQLite engine, models, and connection lifecycle
+│   │   ├── ingest/       # YouTube client, transcript chunker, and pipeline
+│   │   ├── rag/          # True RRF hybrid search, Chroma vector store, Groq synthesis
+│   │   ├── scripts/      # init_db.py, evaluate_retrieval.py
+│   │   └── services/     # Channel management, indexing orchestration, topic extractor
+│   ├── evaluation/       # Benchmark questions (Hussein Nasser backend engineering dataset)
+│   ├── tests/            # 35 automated unit and integration tests (zero external API calls)
+│   ├── requirements.txt  # Core dependencies
+│   ├── requirements-dev.txt # Test dependencies
+│   └── .env.example      # Sample local configuration
 └── frontend/
     ├── src/
-    │   ├── components/   # React UI (ChatWindow, ChannelIndexer, TopicGrid)
-    │   ├── services/     # Axios API client and EventSource handlers
-    │   └── App.jsx       # Main layout and state management
-    └── package.json      
+    │   ├── components/   # ChannelIndexer, ChatWindow, TopicGrid, VideoCard
+    │   ├── services/     # Axios client and EventSource streaming handlers
+    │   └── App.jsx       # Workspace layout and channel state
+    └── package.json
 ```
 
-## Installation
+---
+
+## Local Setup
 
 ### Prerequisites
+
 - Python 3.10+
 - Node.js 18+
 
 ### 1. Backend Setup
+
 ```bash
 cd backend
+
+# Create and activate virtual environment
 python -m venv venv
-# Windows: .\venv\Scripts\activate | Mac/Linux: source venv/bin/activate
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
-### 2. Frontend Setup
+### 2. Environment Configuration
+
+Copy `.env.example` to `.env` in the `backend/` directory:
+
 ```bash
-cd frontend
-npm install
+cp .env.example .env
 ```
 
-## Environment Variables
-Create a `.env` file in the `backend/` directory:
+Set your API keys:
 
 ```env
-YOUTUBE_API_KEY=<your_youtube_api_v3_key>
-GROQ_API_KEY=<your_groq_api_key>
+YOUTUBE_API_KEY=your_youtube_api_v3_key
+GROQ_API_KEY=your_groq_api_key
 DATABASE_URL=sqlite:///./youtube_knowledge_graph.db
-# Or use PostgreSQL: DATABASE_URL=postgresql://user:pass@host/db?sslmode=require
 CHROMA_DB_DIR=./chroma_db
 GROQ_MODEL=llama-3.3-70b-versatile
 EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 ```
 
-## Usage
-1. **Start Backend**: `python -m uvicorn app.main:app --reload` (Runs on `http://127.0.0.1:8000`)
-2. **Start Frontend**: `npm run dev` (Runs on `http://localhost:5173`)
-3. **Index a Channel**: Paste a YouTube channel URL into the dashboard. Watch the SSE progress bar.
-4. **Chat**: Select the indexed channel and ask a question. Click the generated citations to open the video at the exact timestamp.
+### 3. Initialize SQLite Database (Required First Step)
+
+Database table creation is explicitly decoupled from application lifespan. Initialize database tables before starting the backend server:
+
+```bash
+python -m app.scripts.init_db
+```
+
+### 4. Run the Backend API
+
+Once tables are created, start the FastAPI development server:
+
+```bash
+python -m uvicorn app.main:app --reload --port 8000
+```
+
+> **Required Startup Order**:
+> 1. `python -m app.scripts.init_db`
+> 2. `python -m uvicorn app.main:app --reload --port 8000`
+
+The API will be available at `http://127.0.0.1:8000`. Interactive OpenAPI documentation is available at `http://127.0.0.1:8000/docs`.
+
+### 5. Frontend Setup
+
+In a separate terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` in your browser.
+
+---
+
+## Running Automated Tests
+
+The test suite runs completely offline without making external calls to YouTube, Groq, or third-party services:
+
+```bash
+cd backend
+pytest -v
+```
+
+The suite includes 35 tests covering:
+- **`test_transcripter.py`**: Chunking boundary conditions, timestamp preservation, overlap validation, duplicate suppression, temporary audio cleanup, and specific transcript-access fallback exceptions.
+- **`test_topic_extractor.py`**: Unsupervised keyphrase discovery, candidate normalization, and timestamp mapping.
+- **`test_retrieval.py`**: BM25 keyword matching, Chroma integration, cross-channel isolation, True RRF mathematical ordering, and vector cleanup safe failure paths.
+- **`test_api.py`**: Input validation (URL format, message length bounds), 404 handling, 409 conflict on concurrent indexing, and client error masking.
+- **`test_rag_generation.py`**: Context scoping, citation instructions, metadata streaming, and empty retrieval handling.
+
+---
+
+## Retrieval Evaluation
+
+A retrieval evaluation benchmark is included using questions from Hussein Nasser's backend engineering channel:
+
+```bash
+cd backend
+python -m app.scripts.evaluate_retrieval
+```
+
+To display retrieved context passages for manual inspection:
+
+```bash
+python -m app.scripts.evaluate_retrieval --show-results
+```
+
+Calculated metrics:
+- **Recall@5**: Fraction of queries where the ground-truth video appears in the top 5 results.
+- **Recall@10**: Fraction of queries where the ground-truth video appears in the top 10 results.
+- **Mean Reciprocal Rank (MRR)**: Average reciprocal rank of the first relevant chunk.
+- **Average Retrieval Latency**: Mean end-to-end hybrid retrieval duration in milliseconds.
+
+---
+
+## Limitations
+
+- **Local & Single-User**: This application is designed for local, single-user use. SQLite is not intended for distributed multi-user indexing workloads.
+- **In-Process Background Tasks**: FastAPI background tasks run in-process and are not durable distributed job queues. Process termination will stop in-progress jobs (automatically self-healed to `idle` on startup).
+- **Transcript Availability**: Retrieval and answer quality depend directly on YouTube transcript availability (manual or auto-generated captions).
+- **Citations & Verification**: Generated answers should be checked using timestamp citations. While citations are verified against retrieved chunks, LLM outputs must be confirmed by reviewing source footage.

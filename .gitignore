@@ -17,3 +17,5 @@ Thumbs.db
 *.db
 chroma_db/
 dist/
+temp_audio/
+backend/temp_audio/

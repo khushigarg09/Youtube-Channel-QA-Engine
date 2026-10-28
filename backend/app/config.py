@@ -12,6 +12,14 @@ class Settings:
     
     # Model configs
     GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+
+    @property
+    def cors_origins(self) -> list[str]:
+        raw = os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173",
+        )
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 settings = Settings()

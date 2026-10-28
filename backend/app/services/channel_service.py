@@ -15,22 +15,24 @@ class ChannelService:
         """
         Retrieves all channels with aggregated video and indexing statistics.
         """
-        from app.ingest.pipeline import ACTIVE_INDEXING_CHANNELS
         channels = db.query(Channel).all()
         result = []
         for c in channels:
             video_count = db.query(Video).filter(Video.channel_id == c.channel_id).count()
             indexed_count = db.query(Video).filter(Video.channel_id == c.channel_id, Video.status == "indexed").count()
-            is_indexing = c.channel_id in ACTIVE_INDEXING_CHANNELS
+            failed_count = db.query(Video).filter(Video.channel_id == c.channel_id, Video.status.in_(["failed", "no_transcript"])).count()
+            is_indexing = (c.indexing_status == "indexing")
             result.append({
                 "channel_id": c.channel_id,
                 "channel_name": c.channel_name,
                 "custom_url": c.custom_url,
                 "thumbnail_url": c.thumbnail_url,
                 "indexed_at": c.indexed_at,
+                "indexing_status": c.indexing_status or "idle",
                 "is_indexing": is_indexing,
                 "total_videos": video_count,
-                "indexed_videos": indexed_count
+                "indexed_videos": indexed_count,
+                "failed_videos": failed_count
             })
         return result
 

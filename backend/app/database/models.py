@@ -11,6 +11,11 @@ class Channel(Base):
     custom_url = Column(String, nullable=True)
     thumbnail_url = Column(String, nullable=True)
     indexed_at = Column(DateTime, default=datetime.datetime.utcnow)
+    indexing_status = Column(
+        String,
+        default="idle",
+        nullable=False,
+    )  # "idle", "indexing", "cancel_requested"
 
     # Relationships
     videos = relationship("Video", back_populates="channel", cascade="all, delete-orphan")
@@ -25,7 +30,7 @@ class Video(Base):
     upload_date = Column(DateTime, nullable=True)
     thumbnail_url = Column(String, nullable=True)
     duration_seconds = Column(Integer, nullable=True)
-    status = Column(String, default="pending")  # "pending", "indexing", "indexed", "failed"
+    status = Column(String, default="pending")  # "pending", "indexing", "indexed", "failed", "no_transcript"
     error_message = Column(Text, nullable=True)
 
     # Relationships
