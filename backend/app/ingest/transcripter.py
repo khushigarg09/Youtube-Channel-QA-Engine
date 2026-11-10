@@ -186,7 +186,7 @@ class Transcripter:
                         with open(part_path, "rb") as file:
                             response = client.audio.transcriptions.create(
                                 file=(os.path.basename(part_path), file.read()),
-                                model="whisper-large-v3",
+                                model="whisper-large-v3-turbo",
                                 response_format="verbose_json"
                             )
                         
@@ -223,7 +223,7 @@ class Transcripter:
             with open(audio_path, "rb") as file:
                 response = client.audio.transcriptions.create(
                     file=(os.path.basename(audio_path), file.read()),
-                    model="whisper-large-v3",
+                    model="whisper-large-v3-turbo",
                     response_format="verbose_json"
                 )
             

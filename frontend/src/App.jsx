@@ -33,16 +33,16 @@ export default function App() {
     }
   }, []);
 
-  const fetchVideos = useCallback(async () => {
+  const fetchVideos = useCallback(async (showLoading = true) => {
     if (!selectedChannelId) return;
-    setVideosLoading(true);
+    if (showLoading) setVideosLoading(true);
     try {
       const data = await apiService.getVideos(selectedChannelId);
       setVideos(data);
     } catch (err) {
       console.error(err);
     } finally {
-      setVideosLoading(false);
+      if (showLoading) setVideosLoading(false);
     }
   }, [selectedChannelId]);
 
@@ -50,15 +50,15 @@ export default function App() {
     fetchChannels();
   }, [fetchChannels]);
 
+  // Identify actively indexing channel ID to prevent re-opening SSE on progress updates
+  const activeIndexingChannelId = channels.find(c => c.is_indexing)?.channel_id || null;
+
   // Listen to indexing progress via Server-Sent Events (SSE) in real-time
   useEffect(() => {
-    const indexingChannel = channels.find(c => c.is_indexing);
-    if (!indexingChannel) return;
+    if (!activeIndexingChannelId) return;
 
-    const channelId = indexingChannel.channel_id;
-    console.log("Opening indexing progress SSE for channel:", channelId);
-    
-    const eventSource = new EventSource(`${API_BASE_URL}/index-progress/${channelId}`);
+    console.log("Opening indexing progress SSE for channel:", activeIndexingChannelId);
+    const eventSource = new EventSource(`${API_BASE_URL}/index-progress/${activeIndexingChannelId}`);
 
     eventSource.onmessage = (event) => {
       try {
@@ -71,7 +71,7 @@ export default function App() {
         }
 
         setChannels(prev => prev.map(c => {
-          if (c.channel_id === channelId) {
+          if (c.channel_id === activeIndexingChannelId) {
             const newStatus = data.indexing_status || (data.total_videos > 0 && data.indexed_videos === data.total_videos ? 'idle' : c.indexing_status);
             return {
               ...c,
@@ -84,12 +84,15 @@ export default function App() {
           return c;
         }));
 
-        if ((data.total_videos > 0 && data.indexed_videos === data.total_videos) || (data.indexing_status && data.indexing_status !== 'indexing')) {
+        const isDone = (data.total_videos > 0 && data.indexed_videos === data.total_videos) || 
+                       (data.indexing_status && data.indexing_status !== 'indexing');
+
+        if (isDone) {
           console.log("Indexing finished or stopped. Closing SSE stream.");
           eventSource.close();
           fetchChannels();
-          if (selectedChannelId === channelId) {
-            fetchVideos();
+          if (selectedChannelId === activeIndexingChannelId) {
+            fetchVideos(false); // Silent refresh when indexing finishes
           }
         }
       } catch (err) {
@@ -105,15 +108,24 @@ export default function App() {
     return () => {
       eventSource.close();
     };
-  }, [channels, selectedChannelId, fetchChannels, fetchVideos]);
+  }, [activeIndexingChannelId, selectedChannelId, fetchChannels, fetchVideos]);
 
+  // Keep selectedChannel object in sync with channels list
   useEffect(() => {
     if (selectedChannelId) {
       const found = channels.find(c => c.channel_id === selectedChannelId);
       setSelectedChannel(found || null);
-      fetchVideos();
+    } else {
+      setSelectedChannel(null);
     }
-  }, [selectedChannelId, channels, fetchVideos]);
+  }, [selectedChannelId, channels]);
+
+  // Fetch videos ONLY when selectedChannelId changes
+  useEffect(() => {
+    if (selectedChannelId) {
+      fetchVideos(true);
+    }
+  }, [selectedChannelId, fetchVideos]);
 
   const handleViewVideoDetail = async (videoId) => {
     try {

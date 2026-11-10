@@ -83,8 +83,8 @@ def create_app(lifespan_context=lifespan) -> FastAPI:
             "status": "online",
             "service": "YouTube Channel QA Engine API",
             "version": "2.0.0",
-            "db_type": "SQLite",
-            "vector_store": "ChromaDB",
+            "db_type": "PostgreSQL" if "postgres" in settings.DATABASE_URL.lower() else "SQLite",
+            "vector_store": "pgvector" if getattr(settings, "VECTOR_STORE", "pgvector").lower() == "pgvector" else "ChromaDB",
             "features": [
                 "Lifespan Self-Healing",
                 "Hybrid BM25 + Vector RAG with True RRF",
@@ -95,6 +95,21 @@ def create_app(lifespan_context=lifespan) -> FastAPI:
                 "Rate-Limited Streaming Chat"
             ]
         }
+
+    @app.get("/healthz")
+    def health_check():
+        """
+        Orchestration and container readiness probe.
+        Verifies database responsiveness.
+        """
+        from sqlalchemy import text
+        try:
+            with SessionLocal() as db:
+                db.execute(text("SELECT 1"))
+            return {"status": "healthy", "database": "connected"}
+        except Exception as e:
+            logger.error("Health check failure: %s", e)
+            return JSONResponse(status_code=503, content={"status": "unhealthy", "error": "Database unreachable"})
 
     return app
 

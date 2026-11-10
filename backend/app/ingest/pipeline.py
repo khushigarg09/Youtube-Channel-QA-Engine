@@ -78,7 +78,7 @@ def index_single_video_internal(
             db.commit()
             return False
 
-        # 4. Add new SQLite transcript chunks and topics
+        # 4. Add new database transcript chunks (with pgvector embedding) and topics
         try:
             for i, chunk in enumerate(chunks):
                 chroma_id = chroma_ids[i]
@@ -87,7 +87,8 @@ def index_single_video_internal(
                     text=chunk["text"],
                     start_time=chunk["start_time"],
                     duration=chunk["duration"],
-                    chroma_id=chroma_id
+                    chroma_id=chroma_id,
+                    embedding=chunk.get("embedding")
                 )
                 db.add(db_chunk)
 
